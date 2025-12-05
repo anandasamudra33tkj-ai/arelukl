@@ -1,45 +1,41 @@
 <?php
-include_once("config.php");
+require 'config.php';
 
-if (isset($_POST['update'])) {
-    $id = $_POST['id'];
-    $nama = $_POST['nama'];
-    $nomor_presensi = $_POST['nomor_presensi'];
-    $kelas = $_POST['kelas'];
-    $foto_filename = $_POST['old_foto_filename']; // Defaultnya adalah nama file lama
+$id = $_POST['id_peminjaman'];
+$nama = trim($_POST['nama_peminjam']);
+$kelas = trim($_POST['kelas']);
+$ruang = trim($_POST['ruangan_dipinjam']);
+$tgl_pinjam = $_POST['tanggal_pinjam'];
+$tgl_kembali = $_POST['tanggal_kembali'] ?: null;
+$ket = trim($_POST['keterangan']);
 
-    // Cek apakah ada file foto baru yang diunggah
-    if (isset($_FILES['foto']) && $_FILES['foto']['error'] == 0) {
-        $target_dir = "uploads/";
-        $file_baru = $_FILES['foto'];
 
-        // Buat nama file baru yang unik
-        $new_filename = uniqid() . '-' . basename($file_baru['name']);
-        $target_file_baru = $target_dir . $new_filename;
+// Ambil foto lama
+$res = $conn->query("SELECT foto_peminjaman FROM PEMINJAMAN WHERE id_peminjaman=$id");
+$lama = $res->fetch_assoc()['foto_peminjaman'];
 
-        // Pindahkan file baru ke direktori uploads
-        if (move_uploaded_file($file_baru['tmp_name'], $target_file_baru)) {
-            // Jika berhasil diunggah, hapus file lama (jika ada)
-            if (!empty($foto_filename) && file_exists($target_dir . $foto_filename)) {
-                unlink($target_dir . $foto_filename);
-            }
-            // Update nama file dengan yang baru
-            $foto_filename = $new_filename;
-        } else {
-            die("Maaf, terjadi error saat mengunggah file baru Anda.");
-        }
+$foto_baru = $lama;
+
+// Jika upload foto baru
+if (!empty($_FILES['foto_peminjaman']['name'])) {
+    $ext = pathinfo($_FILES['foto_peminjaman']['name'], PATHINFO_EXTENSION);
+    $foto_baru = time() . "_" . rand(1000, 9999) . "." . $ext;
+
+    move_uploaded_file($_FILES['foto_peminjaman']['tmp_name'], "uploads/" . $foto_baru);
+
+    // hapus foto lama
+    if ($lama && file_exists("uploads/" . $lama)) {
+        unlink("uploads/" . $lama);
     }
-
-    // Update data di database
-    $stmt = $mysqli->prepare("UPDATE siswa SET nama=?, nomor_presensi=?, kelas=?, foto_filename=? WHERE id=?");
-    $stmt->bind_param("sissi", $nama, $nomor_presensi, $kelas, $foto_filename, $id);
-
-    if ($stmt->execute()) {
-        header("Location: index.php");
-        exit();
-    } else {
-        echo "Error saat memperbarui data: " . $stmt->error;
-    }
-    $stmt->close();
 }
-?>
+
+$stmt = $conn->prepare("
+    UPDATE PEMINJAMAN 
+    SET nama_peminjam=?, kelas=?, ruangan_dipinjam=?, tanggal_pinjam=?, tanggal_kembali=?, keterangan=?, foto_peminjaman=?
+    WHERE id_peminjaman=?
+");
+$stmt->bind_param("sssssssi", $nama, $kelas, $ruang, $tgl_pinjam, $tgl_kembali, $ket, $foto_baru, $id);
+$stmt->execute();
+
+header("Location: index.php");
+exit();
